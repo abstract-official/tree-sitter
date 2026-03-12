@@ -3140,8 +3140,48 @@ fn test_query_alternation_with_outer_quantifier() {
         (preproc_include)
         (comment)
     ] (_)?)+ @capture";
+
     let query = Query::new(&language, query).unwrap();
     assert_query_matches(&language, &query, source_code, matches);
+}
+
+#[test]
+fn test_query_quantifiers_with_anchors_at_end() {
+    // Test for issue #5416: https://github.com/tree-sitter/tree-sitter/issues/5416
+    // When a quantifier decorates a node which is surrounded by anchors at the end,
+    // it was not behaving correctly
+    let language = get_test_fixture_language("extra_non_terminals_with_shared_rules");
+    let source_code = "a:;b:;c:;";
+
+    // With no quantifier, there are too many trailing siblings, so no match.
+    let query = "(program . (statement) @self . (statement) @rest .)";
+    let query = Query::new(&language, query).unwrap();
+    assert_query_matches(&language, &query, source_code, &[]);
+
+    // With *, both trailing empty statements should be matched.
+    let query = "(program . (statement) @self . (statement)* @rest .)";
+    let query = Query::new(&language, query).unwrap();
+    assert_query_matches(
+        &language,
+        &query,
+        source_code,
+        &[(0, vec![("self", "a:;"), ("rest", "b:;"), ("rest", "c:;")])],
+    );
+
+    // With ?, there is no way to consume both trailing empty statements.
+    let query = "(program . (statement) @self . (statement)? @rest .)";
+    let query = Query::new(&language, query).unwrap();
+    assert_query_matches(&language, &query, source_code, &[]);
+
+    // With +, both trailing empty statements should be matched.
+    let query = "(program . (statement) @self . (statement)+ @rest .)";
+    let query = Query::new(&language, query).unwrap();
+    assert_query_matches(
+        &language,
+        &query,
+        source_code,
+        &[(0, vec![("self", "a:;"), ("rest", "b:;"), ("rest", "c:;")])],
+    );
 }
 
 #[test]
