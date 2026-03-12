@@ -4014,7 +4014,19 @@ static inline bool ts_query_cursor__advance(
             later_sibling_can_match = false;
           }
           if (step->is_last_child && has_later_named_siblings) {
-            node_does_match = false;
+            // For quantified terminal children, intermediate iterations are allowed
+            // to match non-final siblings; the last-child constraint is enforced
+            // when the pass-through step attempts to exit the quantifier.
+            bool can_repeat = false;
+            if ((uint32_t)state->step_index + 1 < self->query->steps.size) {
+              QueryStep *next_query_step = array_get(&self->query->steps, state->step_index + 1);
+              can_repeat =
+                next_query_step->is_pass_through &&
+                next_query_step->alternative_index == state->step_index;
+            }
+            if (!can_repeat) {
+              node_does_match = false;
+            }
           }
           if (step->supertype_symbol) {
             bool has_supertype = false;
@@ -4164,6 +4176,18 @@ static inline bool ts_query_cursor__advance(
             QueryState *child_state = array_get(&self->states, k);
             QueryStep *child_step = array_get(&self->query->steps, child_state->step_index);
             if (child_step->alternative_index != NONE) {
+              if (child_step->is_last_child && has_later_named_siblings) {
+                // A trailing anchor on a quantified child must not allow taking
+                // an optional/exit branch before reaching the true last sibling.
+                if (child_step->is_pass_through) {
+                  child_state->step_index = child_step->alternative_index;
+                  child_state->seeking_immediate_match = true;
+                  k--;
+                  continue;
+                }
+                continue;
+              }
+
               // A "dead-end" step exists only to add a non-sequential jump into the step sequence,
               // via its alternative index. When a state reaches a dead-end step, it jumps straight
               // to the step's alternative.
