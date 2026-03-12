@@ -2594,6 +2594,16 @@ static TSQueryError ts_query__parse_pattern(
                   alternative_step->is_last_child = true;
                 }
               }
+
+              // If the last child expression ended with quantifier-generated
+              // pass-through steps, mark them as last-child as well so that a
+              // trailing anchor applies to the entire quantified expression.
+              for (uint32_t i = last_child_step_index; i < self->steps.size; i++) {
+                QueryStep *step_to_check = array_get(&self->steps, i);
+                if (step_to_check->is_pass_through) {
+                  step_to_check->is_last_child = true;
+                }
+              }
             }
 
             if (negated_field_count) {
